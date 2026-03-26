@@ -45,9 +45,11 @@ run_evaluation()
 
 # ── Q1: Error taxonomy (no GPU needed) ───────────────────────────────────────
 print("\n[Q1e/f] Printing Error Taxonomy and Fixes...")
-from q1_error_analysis import print_taxonomy, FIXES
+from q1.error_analysis.taxonomy import print_taxonomy
+from q1.error_analysis.fixes import FIX_1, FIX_3
 print_taxonomy()
-print(FIXES)
+print(FIX_1)
+print(FIX_3)
 
 # ── Q1: Fine-tuning (GPU, optional) ──────────────────────────────────────────
 if RUN_FINETUNE:
