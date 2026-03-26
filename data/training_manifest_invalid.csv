@@ -1,0 +1,15 @@
+folder_id,speaker_id,recording_id,language,duration_sec,transcription_url,audio_url,error
+147542,246004,988596,hi,475.0,https://storage.googleapis.com/upload_goai/147542/988596_transcription.json,https://storage.googleapis.com/upload_goai/147542/988596.wav,HTTP 404
+147542,93626,990175,hi,475.0,https://storage.googleapis.com/upload_goai/147542/990175_transcription.json,https://storage.googleapis.com/upload_goai/147542/990175.wav,HTTP 404
+147324,318541,989901,hi,1171.0,https://storage.googleapis.com/upload_goai/147324/989901_transcription.json,https://storage.googleapis.com/upload_goai/147324/989901.wav,HTTP 404
+147324,216793,990783,hi,1171.0,https://storage.googleapis.com/upload_goai/147324/990783_transcription.json,https://storage.googleapis.com/upload_goai/147324/990783.wav,HTTP 404
+32369,219333,886193,hi,1083.0,https://storage.googleapis.com/upload_goai/032369/886193_transcription.json,https://storage.googleapis.com/upload_goai/032369/886193.wav,HTTP 404
+32369,232674,888331,hi,1083.0,https://storage.googleapis.com/upload_goai/032369/888331_transcription.json,https://storage.googleapis.com/upload_goai/032369/888331.wav,HTTP 404
+134557,294324,978393,hi,1193.0,https://storage.googleapis.com/upload_goai/134557/978393_transcription.json,https://storage.googleapis.com/upload_goai/134557/978393.wav,HTTP 404
+134557,336911,978484,hi,1193.0,https://storage.googleapis.com/upload_goai/134557/978484_transcription.json,https://storage.googleapis.com/upload_goai/134557/978484.wav,HTTP 404
+133355,108626,979497,hi,1192.0,https://storage.googleapis.com/upload_goai/133355/979497_transcription.json,https://storage.googleapis.com/upload_goai/133355/979497.wav,HTTP 404
+133355,341466,977253,hi,1192.0,https://storage.googleapis.com/upload_goai/133355/977253_transcription.json,https://storage.googleapis.com/upload_goai/133355/977253.wav,HTTP 404
+1923,212988,857737,hi,1079.0,https://storage.googleapis.com/upload_goai/001923/857737_transcription.json,https://storage.googleapis.com/upload_goai/001923/857737.wav,HTTP 404
+1923,286493,856801,hi,1079.0,https://storage.googleapis.com/upload_goai/001923/856801_transcription.json,https://storage.googleapis.com/upload_goai/001923/856801.wav,HTTP 404
+180199,413240,1021370,hi,1194.0,https://storage.googleapis.com/upload_goai/180199/1021370_transcription.json,https://storage.googleapis.com/upload_goai/180199/1021370.wav,HTTP 404
+180199,11057,1020918,hi,1194.0,https://storage.googleapis.com/upload_goai/180199/1020918_transcription.json,https://storage.googleapis.com/upload_goai/180199/1020918.wav,HTTP 404
