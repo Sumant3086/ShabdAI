@@ -59,4 +59,5 @@ def tag_english_words(text: str) -> str:
 def get_english_words(text: str) -> list:
     """Return list of detected English words (both Roman and Devanagari loanwords)."""
     tagged = tag_english_words(text)
-    return re.findall(r'\[EN\](.*?)\[/EN\]', tagged)
+    # Use escaped brackets so [EN] and [/EN] are treated as literals
+    return re.findall(r'\[EN\](.+?)\[/EN\]', tagged)
