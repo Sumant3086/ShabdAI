@@ -1,9 +1,12 @@
-"""Generate submission PDF from SUBMISSION_REPORT.md"""
+"""
+Generate submission PDF with proper Devanagari (Hindi) text rendering.
+Uses Nirmala UI extracted from Windows TTC font collection.
+"""
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable, Table, TableStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import os, re
@@ -11,86 +14,106 @@ import os, re
 OUTPUT = "ShabdAI_Submission_SumantYadav.pdf"
 REPORT = "SUBMISSION_REPORT.md"
 
-# Try to register a Unicode font for Hindi text
-FONT_NAME = "Helvetica"  # fallback
-for font_path in [
-    r"C:\Windows\Fonts\Arial.ttf",
-    r"C:\Windows\Fonts\NirmalaUI.ttf",
-    r"C:\Windows\Fonts\mangal.ttf",
-]:
-    if os.path.exists(font_path):
-        try:
-            fname = os.path.splitext(os.path.basename(font_path))[0].replace(" ", "")
-            pdfmetrics.registerFont(TTFont(fname, font_path))
-            FONT_NAME = fname
-            print(f"Using font: {font_path}")
-            break
-        except Exception:
-            continue
+# Register Nirmala UI (supports Devanagari)
+pdfmetrics.registerFont(TTFont("Nirmala", "Nirmala_0.ttf"))
+pdfmetrics.registerFont(TTFont("NirmalaBold", "Nirmala_1.ttf"))
+print("Font registered: Nirmala UI (Devanagari support)")
 
 doc = SimpleDocTemplate(
-    OUTPUT,
-    pagesize=A4,
-    rightMargin=20*mm, leftMargin=20*mm,
-    topMargin=20*mm, bottomMargin=20*mm,
+    OUTPUT, pagesize=A4,
+    rightMargin=18*mm, leftMargin=18*mm,
+    topMargin=18*mm, bottomMargin=18*mm,
 )
 
-styles = getSampleStyleSheet()
+# Styles
+cover_style = ParagraphStyle("Cover", fontName="NirmalaBold", fontSize=18,
+    spaceAfter=4, textColor=colors.HexColor("#1a1a2e"), alignment=1, leading=24)
+sub_style = ParagraphStyle("Sub", fontName="Nirmala", fontSize=10,
+    spaceAfter=2, textColor=colors.HexColor("#444444"), alignment=1)
+q_style = ParagraphStyle("Q", fontName="NirmalaBold", fontSize=13,
+    spaceAfter=4, spaceBefore=10, textColor=colors.HexColor("#0f3460"), leading=18)
+h2_style = ParagraphStyle("H2", fontName="NirmalaBold", fontSize=10,
+    spaceAfter=3, spaceBefore=6, textColor=colors.HexColor("#16213e"), leading=14)
+body_style = ParagraphStyle("Body", fontName="Nirmala", fontSize=9,
+    spaceAfter=2, leading=14, textColor=colors.HexColor("#2d2d2d"))
+indent_style = ParagraphStyle("Indent", fontName="Nirmala", fontSize=9,
+    spaceAfter=1, leading=13, leftIndent=12, textColor=colors.HexColor("#333333"))
+code_style = ParagraphStyle("Code", fontName="Courier", fontSize=8,
+    spaceAfter=1, leading=11, leftIndent=12,
+    textColor=colors.HexColor("#1a1a1a"), backColor=colors.HexColor("#f4f4f4"))
 
-title_style = ParagraphStyle(
-    "Title", fontName=FONT_NAME, fontSize=16, spaceAfter=6,
-    textColor=colors.HexColor("#1a1a2e"), leading=20, alignment=1
-)
-h1_style = ParagraphStyle(
-    "H1", fontName=FONT_NAME, fontSize=13, spaceAfter=4, spaceBefore=12,
-    textColor=colors.HexColor("#16213e"), leading=16, borderPad=2
-)
-h2_style = ParagraphStyle(
-    "H2", fontName=FONT_NAME, fontSize=11, spaceAfter=3, spaceBefore=8,
-    textColor=colors.HexColor("#0f3460"), leading=14
-)
-body_style = ParagraphStyle(
-    "Body", fontName=FONT_NAME, fontSize=9, spaceAfter=2, leading=13,
-    textColor=colors.HexColor("#2d2d2d")
-)
-code_style = ParagraphStyle(
-    "Code", fontName="Courier", fontSize=8, spaceAfter=2, leading=11,
-    textColor=colors.HexColor("#1a1a1a"),
-    backColor=colors.HexColor("#f5f5f5"), leftIndent=10
-)
+def safe(text):
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 story = []
 
 with open(REPORT, encoding="utf-8") as f:
     lines = f.readlines()
 
-for line in lines:
-    line = line.rstrip("\n")
+i = 0
+while i < len(lines):
+    line = lines[i].rstrip("\n")
 
-    if line.startswith("Josh Talks") or line.startswith("Task Submission"):
-        story.append(Paragraph(line, title_style))
-    elif line.startswith("Submitted by") or line.startswith("Email") or line.startswith("GitHub"):
-        story.append(Paragraph(line, body_style))
-    elif re.match(r"^={4,}", line):
-        story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#16213e")))
+    # Cover lines
+    if i < 6 and line.strip():
+        if i == 0:
+            story.append(Spacer(1, 8*mm))
+            story.append(Paragraph(safe(line), cover_style))
+        elif i == 1:
+            story.append(Paragraph(safe(line), cover_style))
+        else:
+            story.append(Paragraph(safe(line), sub_style))
+        i += 1
+        continue
+
+    # Section dividers
+    if re.match(r"^={4,}", line):
         story.append(Spacer(1, 2*mm))
-    elif re.match(r"^-{4,}", line):
-        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cccccc")))
-    elif re.match(r"^QUESTION \d", line) or re.match(r"^Q\d[a-g]? —", line):
-        story.append(Spacer(1, 3*mm))
-        story.append(Paragraph(line, h1_style))
-    elif re.match(r"^[A-Z][A-Z ]+$", line) and len(line) > 4:
-        story.append(Paragraph(line, h2_style))
-    elif line.startswith("  ") or line.startswith("\t"):
-        # indented = code/table style
-        safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        story.append(Paragraph(safe, code_style))
-    elif line.strip() == "":
+        story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor("#0f3460")))
+        story.append(Spacer(1, 1*mm))
+        i += 1
+        continue
+
+    if re.match(r"^-{4,}", line):
+        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#bbbbbb")))
+        i += 1
+        continue
+
+    # Question headers
+    if re.match(r"^QUESTION \d", line):
+        story.append(Spacer(1, 4*mm))
+        story.append(Paragraph(safe(line), q_style))
+        i += 1
+        continue
+
+    # Sub-headers
+    if re.match(r"^Q\d[a-g]? —", line) or re.match(r"^[A-Z][A-Z0-9 /]+$", line.strip()) and len(line.strip()) > 3:
+        story.append(Paragraph(safe(line), h2_style))
+        i += 1
+        continue
+
+    # Blank line
+    if line.strip() == "":
         story.append(Spacer(1, 2*mm))
-    else:
-        safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        story.append(Paragraph(safe, body_style))
+        i += 1
+        continue
+
+    # Indented lines (code/table/examples)
+    if line.startswith("  ") or line.startswith("\t"):
+        # Check if it looks like a table row (has multiple spaces as columns)
+        stripped = line.strip()
+        if re.match(r'^[a-zA-Z\u0900-\u097F].*\s{3,}', stripped):
+            story.append(Paragraph(safe(stripped), code_style))
+        else:
+            story.append(Paragraph(safe(stripped), indent_style))
+        i += 1
+        continue
+
+    # Normal body text
+    story.append(Paragraph(safe(line), body_style))
+    i += 1
 
 doc.build(story)
 size_kb = os.path.getsize(OUTPUT) / 1024
 print(f"\nPDF created: {OUTPUT}  ({size_kb:.1f} KB)")
+print("Hindi text should now render correctly with Nirmala UI font.")
