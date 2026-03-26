@@ -4,12 +4,37 @@ Q1 fine-tuning is skipped by default (takes hours); set RUN_FINETUNE=True to ena
 """
 
 import sys
+import json
+import requests
 
 RUN_FINETUNE = False   # set True to run full fine-tuning
 
 print("\n" + "="*70)
 print("JOSH TALKS — AI RESEARCHER INTERN ASSIGNMENT")
 print("="*70)
+
+# ── Dataset preview — fetch and pretty-print the sample transcription JSON ────
+print("\n[DATASET] Fetching sample transcription from GCP...")
+SAMPLE_URL = "https://storage.googleapis.com/upload_goai/967179/825780_transcription.json"
+try:
+    resp = requests.get(SAMPLE_URL, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    print(f"\nURL: {SAMPLE_URL}\n")
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+    print(f"\nTotal segments: {len(data) if isinstance(data, list) else 1}")
+except Exception as e:
+    print(f"  [INFO] Could not fetch live data ({e})")
+    print("  Showing local sample instead:\n")
+    sample = [
+        {"start": 0.11,  "end": 14.42, "speaker_id": 245746,
+         "text": "अब काफी अच्छा होता है क्योंकि उनकी जनसंख्या बहुत कम दी जा रही है तो हमें उनको देखना था"},
+        {"start": 14.42, "end": 29.03, "speaker_id": 245746,
+         "text": "अनुभव करके कुछ लिखना था तो वह तो बिना देखिए नहीं हो सकती थी तो हम वहां गया थे कुड़रमा घाटी तरफ"},
+        {"start": 29.03, "end": 41.84, "speaker_id": 245746,
+         "text": "जंगल का सफर होता है जब हम रहने के लिए गए थे नातो चाहते के साथ जैसे हम वहाँ पहले एंटर किये थे"},
+    ]
+    print(json.dumps(sample, ensure_ascii=False, indent=2))
 
 # ── Q2: Number normalisation + English detection (no GPU needed) ──────────────
 print("\n[Q2] Running ASR Cleanup Pipeline demos...")
