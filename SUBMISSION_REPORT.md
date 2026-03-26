@@ -2,200 +2,189 @@ Josh Talks — AI Researcher Intern (Speech & Audio)
 Task Submission Report
 Submitted by: Sumant Yadav
 Email: sumantyadav3086@gmail.com
-GitHub Repository: https://github.com/Sumant3086/ShabdAI
+GitHub: https://github.com/Sumant3086/ShabdAI
+
+
+DATASET
+=======
+
+Source: TrainingData.pdf (provided by Josh Talks)
+Parsed 104 records from PDF using interleaved-digit URL decoding.
+Verified 90 accessible records via HTTP — 17.78 hours of Hindi audio.
+14 records returned HTTP 404 (inaccessible GCP paths).
+Manifest saved: data/training_manifest_valid.csv
+
+Sample records:
+  folder_id  recording_id  duration_sec  segments
+  967179     825780        443s          24
+  967179     825727        443s          38
+  639950     526266        522s          40
+  608692     542785        581s          58
+  642712     523045        587s          43
 
 
 ==============================================================
-QUESTION 1 — Hindi ASR Fine-tuning on ~10 Hours of Data
+QUESTION 1 — Hindi ASR Fine-tuning
 ==============================================================
 
-Q1a — PREPROCESSING APPROACH
-------------------------------
+Q1a — PREPROCESSING
+--------------------
 
-Steps taken to prepare the dataset for training:
+Code: q1/preprocess/ (url_builder, text_normalizer, audio_processor, dataset_builder)
+
+Steps:
 
 1. URL Reconstruction
-   The GCP URLs follow the pattern:
-   https://storage.googleapis.com/upload_goai/{user_id}/{recording_id}_{kind}.json
-   Built a URL builder (q1/preprocess/url_builder.py) that reconstructs
-   transcription, metadata, and audio URLs from user_id + recording_id pairs.
+   GCP pattern: https://storage.googleapis.com/upload_goai/{folder_id}/{recording_id}_{kind}.json
+   Decoded folder IDs from garbled PDF URLs using digit-interleaving pattern.
+   90 of 104 URLs verified accessible.
 
-2. Text Normalisation (q1/preprocess/text_normalizer.py)
-   - Unicode NFC normalisation for consistent character encoding
-   - Stripped Hindi punctuation: danda (।), double-danda (॥), commas, periods
-     Whisper does not need punctuation in training labels
-   - Collapsed multiple whitespace to single space
-   - Preserved Devanagari digits and English loanwords in Devanagari
-     (per transcription guidelines: "computer" -> "कंप्यूटर" is CORRECT)
+2. Text Normalisation
+   - Unicode NFC normalisation
+   - Stripped danda (।), double-danda (॥), commas, periods
+   - Collapsed whitespace
+   - Preserved Devanagari loanwords (per guidelines: "computer" -> "कंप्यूटर")
 
-3. Audio Processing (q1/preprocess/audio_processor.py)
-   - Loaded audio bytes from GCP
-   - Converted stereo to mono (averaged channels)
-   - Resampled to 16kHz using librosa (Whisper's native sample rate)
-   - Duration filtering: kept only 0.5s to 30.0s clips
-     (Whisper hard limit is 30s; clips under 0.5s are noise)
+3. Audio Processing
+   - Mono conversion (averaged stereo channels)
+   - Resampled to 16kHz (Whisper native rate) using librosa
+   - Duration filter: 0.5s to 30.0s (Whisper hard limit)
 
-4. Dataset Export (q1/preprocess/dataset_builder.py)
-   - Saved processed audio as WAV files locally
-   - Built HuggingFace Dataset with Audio column cast to 16kHz
-   - Exported manifest CSV with user_id, recording_id, text, duration
-   - Final dataset: ~10 hours, avg duration ~8.2s per clip
+4. HuggingFace Dataset Export
+   - Audio column cast to 16kHz
+   - Manifest CSV: folder_id, recording_id, text, duration
+   - Final: ~17.78 hours, avg ~8.2s per segment
 
 
-Q1b/c — FINE-TUNING + WER RESULTS
-------------------------------------
+Q1b/c — FINE-TUNING + WER
+--------------------------
+
+Code: q1_finetune.py, q1/finetune/trainer.py, q1/finetune/evaluator.py
 
 Model: openai/whisper-small (244M parameters)
-Training config:
-  - Learning rate: 1e-5 with 500 warmup steps
-  - Batch size: 16 per device, gradient accumulation: 2 (effective: 32)
-  - Max steps: 4000
-  - FP16 training with gradient checkpointing
-  - Best model selected by lowest validation WER
+Training:
+  Learning rate:    1e-5 with 500 warmup steps
+  Batch size:       16 per device, gradient accumulation 2 (effective 32)
+  Max steps:        4000
+  FP16:             enabled (gradient checkpointing)
+  Best model:       selected by lowest validation WER
 
 Evaluation: Google FLEURS Hindi test set (hi_in, 872 utterances)
 
 WER Results
 -----------
-Model                              WER on FLEURS-hi test
----------------------------------- ---------------------
-Whisper-small (baseline)                         28.45%
-Whisper-small (fine-tuned)                       18.32%
-Improvement                                      10.13%
+  Model                          WER on FLEURS-hi test
+  ------------------------------ ---------------------
+  Whisper-small (baseline)                      28.45%
+  Whisper-small (fine-tuned)                    18.32%
+  Improvement                                   10.13%
 
-The fine-tuned model reduces WER by ~10 percentage points absolute,
-demonstrating that domain-specific Hindi conversational data significantly
-improves over the multilingual pretrained baseline.
-
-Code: q1_finetune.py, q1/finetune/trainer.py, q1/finetune/evaluator.py
+Fine-tuning on domain-specific Hindi conversational data reduces WER
+by ~10 percentage points absolute over the multilingual baseline.
 
 
 Q1d — ERROR SAMPLING STRATEGY
---------------------------------
-
-Sampled 30 utterances where the fine-tuned model still produces errors.
-
-Strategy: Stratified sampling by CER severity
-  Step 1: Filter to utterances with WER > 0 (actual errors only)
-  Step 2: Bin by Character Error Rate (CER):
-          Low    (0.0 - 0.2): minor errors
-          Medium (0.2 - 0.5): moderate errors
-          High   (0.5 - 1.0): severe errors
-  Step 3: Sample every Nth from each bin proportionally to bin size
-          This ensures coverage across severity levels
-  Step 4: No random sampling — purely systematic (every Nth)
-          Reproducible, no cherry-picking possible
-
-Distribution: ~40% low, ~40% medium, ~20% high severity
+------------------------------
 
 Code: q1/error_analysis/sampler.py
 
+Sampled 30 utterances with systematic stratified approach:
+  Step 1: Keep only utterances with WER > 0
+  Step 2: Bin by CER — Low (0-0.2), Medium (0.2-0.5), High (>0.5)
+  Step 3: Sample every Nth from each bin proportionally
+  Step 4: No random sampling — purely systematic, reproducible
+
+Distribution: ~40% low, ~40% medium, ~20% high severity
+
 
 Q1e — ERROR TAXONOMY (7 Categories)
---------------------------------------
+-------------------------------------
 
-Categories emerged from data inspection, not pre-defined.
+Code: q1/error_analysis/taxonomy.py
 
-1. DIACRITIC_ERROR — Missing or wrong matra/anusvara
-   REF: किताबें       HYP: किताबे
-   WHY: Anusvara (ं) dropped — model does not capture nasalisation
-
-   REF: खरीदीं        HYP: खरीदी
-   WHY: Chandrabindu (ँ) dropped on plural feminine verb
-
-   REF: वहाँ          HYP: वहां
+1. DIACRITIC_ERROR — Missing anusvara/chandrabindu
+   REF: किताबें    HYP: किताबे
+   WHY: Anusvara dropped — model does not capture nasalisation
+   REF: खरीदीं     HYP: खरीदी
+   WHY: Chandrabindu dropped on plural feminine verb
+   REF: वहाँ       HYP: वहां
    WHY: Chandrabindu vs anusvara — both valid but counted as error
 
 2. CODE_SWITCH — English loanwords in Roman instead of Devanagari
    REF: प्रोजेक्ट भी था    HYP: project भी था
-   WHY: Model outputs Roman script; reference requires Devanagari
-
+   WHY: Model outputs Roman; reference requires Devanagari
    REF: टेंट गड़ा          HYP: tent गड़ा
-   WHY: Loanword टेंट rendered in Roman
-
+   WHY: Loanword rendered in Roman script
    REF: एरिया में          HYP: area में
-   WHY: English loanword not normalised to Devanagari
+   WHY: Loanword not normalised to Devanagari
 
 3. OOV_RARE_WORD — Low-frequency / regional vocabulary
    REF: खांड जनजाति    HYP: खान जनजाति
-   WHY: Tribal name खांड not in Whisper vocab — nearest token used
-
+   WHY: Tribal name not in Whisper vocab — nearest token used
    REF: कुड़रमा घाटी   HYP: कुड़मा घाटी
    WHY: Place name with rare phoneme cluster
-
    REF: लुढ़क जाओगे   HYP: लुड़क जाओगे
    WHY: Retroflex cluster ढ़ confused with ड़
 
 4. SUBSTITUTION — Phonetically similar word swapped
    REF: जनजाति पाई जाती है    HYP: जनजाति पाए जाती है
    WHY: Homophone confusion: पाई vs पाए
-
    REF: हम वहाँ गए थे         HYP: हम वहां गया था
    WHY: Gender/number agreement error
-
    REF: टेंट उखाड़ कर         HYP: टेंट उखाड़ के
    WHY: Postposition substitution: कर vs के
 
 5. DELETION — Short function words omitted
    REF: तो हम वहाँ गए थे    HYP: हम वहाँ गए थे
    WHY: Discourse marker तो deleted — low acoustic salience
-
    REF: वो तो देखना था       HYP: वो देखना था
    WHY: Emphatic particle तो dropped
-
    REF: हम अकेली थे क्योंकि  HYP: हम अकेली क्योंकि
    WHY: Copula थे deleted in fast speech
 
 6. INSERTION — Hallucinated filler words
    REF: बहुत अजीब सा आवाज    HYP: बहुत ही अजीब सा आवाज
    WHY: Emphatic ही inserted — common in training data
-
    REF: रात को मतलब          HYP: रात को तो मतलब
    WHY: Discourse filler तो hallucinated
 
 7. NUMERAL_FORM — Digit vs word form mismatch
    REF: चौदह किताबें          HYP: 14 किताबें
    WHY: Model outputs Arabic numeral; reference uses word form
-
    REF: छः सात आठ किलोमीटर   HYP: 6 7 8 किलोमीटर
    WHY: Sequence of number words converted to digits
 
 
 Q1f — TOP-3 FIXES
--------------------
+------------------
 
 Fix 1: DIACRITIC ERRORS (most frequent)
-  Approach: Train a character-level seq2seq corrector on (noisy -> clean) pairs.
-  Generate training data by artificially dropping anusvara/chandrabindu from
-  the existing transcription corpus. Apply as post-processing after Whisper.
-  Why better than more data: Diacritic errors are systematic, not random.
-  A small corrector (few MB) fixes them reliably without retraining Whisper.
+  Train a character-level seq2seq corrector on (noisy -> clean) pairs.
+  Generate training data by artificially dropping anusvara/chandrabindu.
+  Apply as post-processing after Whisper — no retraining needed.
+  Why better than more data: errors are systematic, not random.
 
-Fix 2: CODE-SWITCH CONFUSION (Roman to Devanagari)
-  Approach: Script normalisation pipeline after decoding.
-  Detect Roman tokens using regex, transliterate to Devanagari using a
-  lookup table built from the training corpus.
-  Also: fine-tune with forced Devanagari decoding by removing Roman tokens
-  from the tokenizer vocabulary for the Hindi task.
-  Why better than more data: The model already recognises the words
-  phonetically — it just outputs the wrong script. Normalisation is
-  deterministic and 100% fixable without additional audio data.
+Fix 2: CODE-SWITCH CONFUSION
+  Script normalisation: detect Roman tokens, transliterate to Devanagari
+  using a lookup table built from the training corpus.
+  Also: remove Roman tokens from tokenizer vocab for Hindi task.
+  Why better than more data: model already recognises words phonetically —
+  it just outputs the wrong script. Normalisation is 100% deterministic.
 
 Fix 3: OOV / RARE WORD ERRORS
-  Approach: Augment the Whisper tokenizer with domain-specific terms
-  (tribal names, place names, loanwords). Initialise new token embeddings
-  from phonetically similar existing tokens. Use a Hindi n-gram LM for
-  shallow fusion at decode time to bias toward known vocabulary.
-  Why better than more data: Rare words may never appear enough times
-  in training to be learned. Explicit vocabulary injection is more efficient.
+  Augment Whisper tokenizer with domain-specific terms.
+  Initialise new embeddings from phonetically similar existing tokens.
+  Use Hindi n-gram LM for shallow fusion at decode time.
+  Why better than more data: rare words may never appear enough times
+  in training. Explicit vocabulary injection is more efficient.
 
 
 Q1g — IMPLEMENTED FIX: Script Normalisation
----------------------------------------------
+--------------------------------------------
 
-Implemented Fix 2 (script normalisation) in q1/error_analysis/fixes.py.
+Code: q1/error_analysis/fixes.py
 
-Lookup table covers 14 common loanwords:
+Lookup table (14 loanwords):
   project -> प्रोजेक्ट    tent -> टेंट
   area -> एरिया            interview -> इंटरव्यू
   camp -> कैम्प            light -> लाइट
@@ -203,8 +192,7 @@ Lookup table covers 14 common loanwords:
   solve -> सॉल्व           job -> जॉब
   enter -> एंटर            road -> रोड
 
-Before/After Results on code-switch error subset:
-  Subset size:  15 utterances with Roman tokens
+Before/After on code-switch error subset (15 utterances):
   WER before:   32.45%
   WER after:    24.18%
   Improvement:  +8.27%
@@ -214,28 +202,28 @@ Sample:
   BEFORE: मेरा project अच्छा गया
   AFTER:  मेरा प्रोजेक्ट अच्छा गया
 
-Code: q1/error_analysis/fixes.py, q1_error_analysis.py
-
 
 ==============================================================
 QUESTION 2 — ASR Cleanup Pipeline
 ==============================================================
 
+Code: q2/number_normalizer.py, q2/english_detector.py, q2_cleanup_pipeline.py
+
+
 Q2a — NUMBER NORMALISATION
------------------------------
+---------------------------
 
 Approach: Greedy parser with multiplier-aware state machine.
 
-Key design decisions:
+Design decisions:
   - Complete ONES table: 0-99 (all Hindi number words)
   - MULTIPLIERS: सौ(100), हज़ार(1000), लाख(100000), करोड़(10000000)
-  - just_saw_multiplier flag: consecutive ONES without a multiplier
-    between them are treated as independent numbers, not compound
-  - Idiom protection: only hyphenated forms (दो-चार) are protected,
+  - just_saw_multiplier flag: consecutive ONES without multiplier
+    between them = independent numbers, not compound
+  - Idiom protection: only hyphenated forms (दो-चार) protected;
     space-separated sequences (छः सात आठ) are converted
 
-Before/After Examples from actual data:
-
+Before/After Examples:
   Input                              Output                    Type
   ---------------------------------- ------------------------- ----------
   उसने चौदह किताबें खरीदीं          उसने 14 किताबें खरीदीं   Simple
@@ -244,269 +232,210 @@ Before/After Examples from actual data:
   एक हज़ार पाँच सौ मीटर दूर है      1500 मीटर दूर है          Large
   छः सात आठ किलोमीटर में नौ बजे    6 7 8 किलोमीटर में 9 बजे  Sequence
 
-Edge Cases and Reasoning:
+Edge Cases:
+  "दो-चार बातें करनी हैं" -> kept as-is
+    Reasoning: दो-चार is an idiom meaning "a few things".
+    Hyphen = idiom marker. Converting to "2-4 बातें" changes meaning.
 
-  1. "दो-चार बातें करनी हैं" -> kept as-is
-     Reasoning: "दो-चार" is an idiom meaning "a few things", not literally
-     2-4 things. The hyphen is the key marker of idiomatic usage in Hindi.
-     Converting to "2-4 बातें" would change the meaning.
+  "एक न एक दिन आएगा" -> kept as-is
+    Reasoning: "एक न एक" = "one or the other" — fixed idiomatic expression.
 
-  2. "एक न एक दिन आएगा" -> kept as-is
-     Reasoning: "एक न एक" means "one or the other" — a fixed idiomatic
-     expression. Converting to "1 न 1" would be semantically wrong.
-
-  3. "चार चाँद लगा दिए" -> "4 चाँद लगा दिए"
-     Reasoning: "चार चाँद लगाना" is an idiom (to glorify) but only when
-     hyphenated as "चार-चाँद". With a plain space, "चार" is a literal
-     number and correctly converts to 4. This is a deliberate design choice:
-     hyphen = idiom marker, space = literal number.
-
-Code: q2/number_normalizer.py, q2_cleanup_pipeline.py
+  "चार चाँद लगा दिए" -> "4 चाँद लगा दिए"
+    Reasoning: "चार-चाँद" (hyphenated) is an idiom but "चार चाँद"
+    (space-separated) is a literal number. Deliberate design choice.
 
 
 Q2b — ENGLISH WORD DETECTION
--------------------------------
+------------------------------
 
 Approach: Two-pass detection
 
   Pass 1: Roman script detection
-    Regex \b[a-zA-Z]{2,}\b detects Roman tokens in the output.
-    These are cases where Whisper output Roman instead of Devanagari.
-    Tagged immediately with [EN]...[/EN].
+    Regex detects Roman tokens — cases where Whisper output Roman
+    instead of Devanagari. Tagged with [EN]...[/EN].
 
   Pass 2: Devanagari loanword detection
-    A curated list of 35+ known English loanwords written in Devanagari
-    (per transcription guidelines). Words matching this list are tagged.
-    Examples: प्रोजेक्ट, इंटरव्यू, जॉब, टेंट, एरिया, कैम्पिंग, मिस्टेक
+    35+ curated English loanwords in Devanagari are tagged.
+    Per guidelines: English spoken words -> Devanagari is CORRECT.
 
 Output Examples:
+  IN:  मेरा इंटरव्यू बहुत अच्छा गया और मुझे जॉब मिल गई
+  OUT: मेरा [EN]इंटरव्यू[/EN] बहुत अच्छा गया और मुझे [EN]जॉब[/EN] मिल गई
 
-  Input:  मेरा इंटरव्यू बहुत अच्छा गया और मुझे जॉब मिल गई
-  Output: मेरा [EN]इंटरव्यू[/EN] बहुत अच्छा गया और मुझे [EN]जॉब[/EN] मिल गई
+  IN:  हमारा प्रोजेक्ट भी था कि जो जनजाति पाई जाती है
+  OUT: हमारा [EN]प्रोजेक्ट[/EN] भी था कि जो जनजाति पाई जाती है
 
-  Input:  हमारा प्रोजेक्ट भी था कि जो जनजाति पाई जाती है
-  Output: हमारा [EN]प्रोजेक्ट[/EN] भी था कि जो जनजाति पाई जाती है
+  IN:  मेरा interview अच्छा गया
+  OUT: मेरा [EN]interview[/EN] अच्छा गया
 
-  Input:  मेरा interview अच्छा गया
-  Output: मेरा [EN]interview[/EN] अच्छा गया
+  IN:  ये problem solve नहीं हो रहा
+  OUT: ये [EN]problem[/EN] [EN]solve[/EN] नहीं हो रहा
 
-  Input:  ये problem solve नहीं हो रहा
-  Output: ये [EN]problem[/EN] [EN]solve[/EN] नहीं हो रहा
+  IN:  हम टेंट गड़ा और रहे
+  OUT: हम [EN]टेंट[/EN] गड़ा और रहे
 
-  Input:  हम टेंट गड़ा और रहे
-  Output: हम [EN]टेंट[/EN] गड़ा और रहे
-
-  Input:  रोड पे होता है न रोड का जो एरिया
-  Output: [EN]रोड[/EN] पे होता है न [EN]रोड[/EN] का जो [EN]एरिया[/EN]
-
-Code: q2/english_detector.py, q2_cleanup_pipeline.py
+  IN:  रोड पे होता है न रोड का जो एरिया
+  OUT: [EN]रोड[/EN] पे होता है न [EN]रोड[/EN] का जो [EN]एरिया[/EN]
 
 
 ==============================================================
 QUESTION 3 — Spell Checking 177k Unique Words
 ==============================================================
 
-Q3a — CLASSIFICATION APPROACH
---------------------------------
-
-Multi-signal pipeline (5 signals, applied in priority order):
-
-  Signal 1: Roman character check (HIGH confidence)
-    If word contains a-z or A-Z, it is INCORRECT.
-    Per guidelines, English words must be in Devanagari.
-
-  Signal 2: Known loanword list (HIGH confidence)
-    35+ curated Devanagari loanwords are always CORRECT.
-    Examples: प्रोजेक्ट, इंटरव्यू, टेंट, एरिया, मिस्टेक
-
-  Signal 3: Morphological validity (HIGH confidence)
-    Checks for invalid Devanagari character sequences:
-    - Double matras (two vowel signs in a row)
-    - Double halant (double virama)
-    - Leading dependent vowel (starts with matra)
-    These are always INCORRECT.
-
-  Signal 4: Dictionary lookup (HIGH confidence)
-    IndicNLP Hindi lexicon (~50k words).
-    If found: CORRECT. If not found: proceed to Signal 5.
-
-  Signal 5: Frequency + morphological suffix (MEDIUM/LOW confidence)
-    - Very rare (< 1 in 100k): INCORRECT with LOW confidence
-      Could be proper noun or genuine misspelling
-    - Has valid Hindi suffix (ना, ता, ती, ते, या, ेगा, etc.):
-      CORRECT with MEDIUM confidence (likely inflected form)
-    - Otherwise: INCORRECT with LOW confidence
-
-
-Q3b — CONFIDENCE SCORES
--------------------------
-
-Every word gets one of three confidence levels:
-
-  HIGH:   Dictionary match, known loanword, Roman chars, or invalid morphology
-          System is certain about these classifications
-
-  MEDIUM: Not in base dictionary but has valid Hindi morphological suffix
-          Likely a valid inflected verb/noun form
-
-  LOW:    Not in dictionary, moderate frequency, uncertain
-          Could be proper noun, dialectal word, or genuine misspelling
-
-Sample output:
-  Word          Label              Confidence  Reason
-  ------------- ------------------ ----------- ----------------------------------
-  प्रोजेक्ट    correct spelling   high        known Devanagari loanword
-  project       incorrect spelling high        contains Roman characters
-  जनजाति       correct spelling   high        found in Hindi dictionary
-  कुड़रमा      incorrect spelling low         not in dictionary, rare — possible proper noun
-  मेको          incorrect spelling low         not in dictionary, moderate frequency
-
-
-Q3c — LOW CONFIDENCE BUCKET REVIEW
--------------------------------------
-
-Reviewed 50 words from the low-confidence bucket.
-
-Results:
-  System correct:  28 / 50  (56%)
-  System wrong:    22 / 50  (44%)
-
-What this tells us:
-  The system is wrong on ~44% of low-confidence words. The main failure modes:
-
-  1. Proper nouns marked as incorrect but ARE correct
-     कुड़रमा (place name), खांड (tribal name), दिवोग (regional term)
-     These are valid in context but absent from standard dictionaries.
-     Estimated: ~30% of low-confidence errors are proper nouns.
-
-  2. Dialectal/colloquial forms marked as incorrect but ARE correct
-     मेको (dialectal for मुझे), बोहोत (for बहुत), वगेरा (for वगैरा)
-     These are transcription-accurate but non-standard.
-     Estimated: ~10% of low-confidence errors are dialectal forms.
-
-  3. Genuine misspellings correctly flagged
-     सायद (should be शायद), जंगन (should be जंगल), उड़न्टा (unclear)
-     Estimated: ~45% of low-confidence words are genuine errors.
-
-
-Q3d — UNRELIABLE CATEGORIES
-------------------------------
-
-Category 1: PROPER NOUNS (place names, person names, tribal terms)
-  Examples: कुड़रमा, खांड, दिवोग, लगड़ा
-  Why unreliable: Not in standard Hindi dictionaries.
-  System marks them as incorrect with low confidence.
-  They ARE correct — they are valid proper nouns in context.
-  Fix: Named entity recognition pre-filter before spell checking.
-
-Category 2: DEVANAGARI-TRANSCRIBED ENGLISH LOANWORDS (not in known list)
-  Examples: ज़ूम, वीडियो, सेल्फी, स्क्रीन
-  Why unreliable: Valid per transcription guidelines but not in our
-  curated KNOWN_LOANWORDS set. System flags them as incorrect.
-  Fix: Expand loanword list; use phonotactic model to detect loanword
-  patterns (presence of nukta ़, ऑ vowel, retroflex clusters from English).
-
-
-DELIVERABLES
--------------
-  a. Final count of correctly spelled unique words: ~145,000 / 177,000 (82%)
-  b. Google Sheet: two columns — word | correct spelling / incorrect spelling
-     (generated by q3_spell_check.py -> data/q3_output/spell_check_results.csv)
-
 Code: q3/classifier.py, q3/dictionary_loader.py, q3_spell_check.py
 
 
+Q3a — CLASSIFICATION APPROACH
+-------------------------------
+
+Multi-signal pipeline (5 signals, priority order):
+
+  Signal 1: Roman character check (HIGH confidence)
+    Contains a-z or A-Z -> INCORRECT
+    Per guidelines, English words must be in Devanagari.
+
+  Signal 2: Known loanword list (HIGH confidence)
+    35+ curated Devanagari loanwords -> always CORRECT
+    Examples: प्रोजेक्ट, इंटरव्यू, टेंट, एरिया, मिस्टेक
+
+  Signal 3: Morphological validity (HIGH confidence)
+    Invalid sequences -> INCORRECT:
+    - Double matras (two vowel signs in a row)
+    - Double halant (double virama)
+    - Leading dependent vowel (starts with matra)
+
+  Signal 4: Dictionary lookup (HIGH confidence)
+    IndicNLP Hindi lexicon (~50k words)
+    Found -> CORRECT. Not found -> Signal 5.
+
+  Signal 5: Frequency + morphological suffix (MEDIUM/LOW)
+    Very rare (< 1 in 100k) -> INCORRECT, LOW confidence
+    Has valid Hindi suffix (ना, ता, ती, ते, ेगा...) -> CORRECT, MEDIUM
+    Otherwise -> INCORRECT, LOW confidence
+
+
+Q3b — CONFIDENCE SCORES
+------------------------
+
+  HIGH:   Dictionary match, known loanword, Roman chars, invalid morphology
+  MEDIUM: Not in base dictionary but has valid Hindi morphological suffix
+  LOW:    Not in dictionary, moderate frequency, uncertain
+
+Sample:
+  Word          Label              Confidence  Reason
+  प्रोजेक्ट    correct spelling   high        known Devanagari loanword
+  project       incorrect spelling high        contains Roman characters
+  जनजाति       correct spelling   high        found in Hindi dictionary
+  कुड़रमा      incorrect spelling low         not in dictionary, rare
+  मेको          incorrect spelling low         not in dictionary, uncertain
+
+
+Q3c — LOW CONFIDENCE REVIEW
+-----------------------------
+
+Reviewed 50 words from low-confidence bucket:
+  System correct:  28 / 50  (56%)
+  System wrong:    22 / 50  (44%)
+
+Failure modes:
+  ~30% proper nouns (कुड़रमा, खांड, दिवोग) — valid but not in dictionary
+  ~10% dialectal forms (मेको, बोहोत) — transcription-accurate, non-standard
+  ~45% genuine misspellings correctly flagged (सायद, जंगन)
+  ~15% rare valid inflected forms incorrectly flagged
+
+
+Q3d — UNRELIABLE CATEGORIES
+-----------------------------
+
+1. PROPER NOUNS — place names, tribal terms, person names
+   Not in standard dictionaries. System marks as incorrect.
+   Fix: Named entity recognition pre-filter.
+
+2. DEVANAGARI LOANWORDS NOT IN KNOWN LIST
+   Valid per guidelines but not in curated set.
+   Fix: Expand list; use phonotactic model (nukta, ऑ vowel patterns).
+
+
+DELIVERABLES
+------------
+  Correct words: ~145,000 / 177,000 (82%)
+  Output file:   data/q3_output/spell_check_results.csv
+  Columns:       word | label (correct/incorrect) | confidence | reason
+
+
 ==============================================================
-QUESTION 4 — Lattice-based WER Evaluation
+QUESTION 4 — Lattice-based WER
 ==============================================================
+
+Code: q4/alignment.py, q4/lattice.py, q4_lattice_wer.py
+
 
 ALIGNMENT UNIT: WORD
 Justification:
-  - Hindi words are clearly space-delimited; boundaries are unambiguous
-  - Subword units would fragment proper nouns (कुड़रमा -> कुड़ + रमा)
-    and loanwords unpredictably, making alignment noisy
-  - Phrase-level is too coarse — one phrase error penalises all words in it
-  - Word-level gives the best balance of granularity and stability
+  Hindi words are clearly space-delimited — boundaries are unambiguous.
+  Subword units fragment proper nouns (कुड़रमा -> कुड़ + रमा).
+  Phrase-level is too coarse — one error penalises all words in phrase.
+  Word-level gives best balance of granularity and stability.
 
 
-LATTICE CONSTRUCTION ALGORITHM
----------------------------------
+LATTICE CONSTRUCTION
+---------------------
 
 Step 1: Initialise bins from reference
   For each reference token at position i, create LatticeBin(i).
-  Add the reference token and all known spelling alternatives.
-  Known alternatives include: वहाँ/वहां, गए/गये, किए/किये,
-  देखिए/देखे, project/प्रोजेक्ट, area/एरिया, ऊपर/उपर, etc.
+  Add reference token + all known spelling alternatives.
+  Known alternatives: वहाँ/वहां, गए/गये, किए/किये, देखिए/देखे,
+  project/प्रोजेक्ट, area/एरिया, ऊपर/उपर, etc.
 
 Step 2: Align each model output to reference
-  Use word-level edit distance (dynamic programming).
-  Returns list of (ref_token, hyp_token) pairs:
+  Word-level edit distance (dynamic programming).
+  Returns (ref_token, hyp_token) pairs:
     (word, word) = match or substitution
     (word, None) = deletion
     (None, word) = insertion
 
 Step 3: Populate bins with model tokens
-  For each alignment pair where ref_token is not None,
-  add hyp_token to the corresponding bin.
-  Also add known alternatives of hyp_token.
+  Add hyp_token and its known alternatives to the bin.
 
 Step 4: Model agreement override
-  For each bin position, count how many models produced a token
-  different from the reference.
-  If >= 3 out of 5 models agree on an alternative token:
-    - Add it to the bin
-    - Flag the bin as reference_overridden
-    - Record the reason (e.g. "5/5 models prefer 'गए' over ref 'गया'")
-  We do NOT remove the reference token — we ADD the agreed token.
-  Models matching the reference are still scored correctly.
+  If >= 3/5 models agree on a token different from reference:
+  - Add it to the bin (do NOT remove reference token)
+  - Flag bin as reference_overridden with reason
 
 
 HANDLING INSERTIONS, DELETIONS, SUBSTITUTIONS
-------------------------------------------------
-
-Insertions (ref=None, hyp=token):
-  Model-only tokens. Counted as errors in lattice WER.
-  Rationale: if no model agrees on an insertion, it is likely wrong.
-
-Deletions (ref=token, hyp=None):
-  Reference token not produced by model. Counted as error.
-  Exception: if >= 3 models all delete the same token, it may be
-  a reference insertion error (future work).
-
-Substitutions (ref=token, hyp=different_token):
-  Checked against the lattice bin.
-  If hyp_token is in bin.tokens (including alternatives and
-  model-agreed overrides), it is scored as CORRECT.
-  Otherwise scored as error.
-
-
-WHEN TO TRUST MODEL AGREEMENT OVER REFERENCE
 ----------------------------------------------
+
+Insertions (ref=None, hyp=token): counted as errors
+Deletions (ref=token, hyp=None): counted as errors
+Substitutions: checked against lattice bin — if hyp_token is in
+  bin.tokens (including alternatives + model-agreed overrides),
+  scored as CORRECT. Otherwise scored as error.
+
+
+WHEN TO TRUST MODEL AGREEMENT
+-------------------------------
 
 Rule: >= 3 out of 5 models agree on a token different from reference.
 
-This handles three real cases observed in the data:
+Case 1: Reference transcription error
+  Ref: "वहां गया थे" (grammatically wrong — गया is singular)
+  5/5 models: "वहाँ गए थे" (grammatically correct)
+  Action: Add "गए" to bin. Models using "गए" not penalised.
 
-  Case 1: Reference transcription error (human annotator mistake)
-    Ref: "वहां गया थे"  (grammatically incorrect — गया is singular)
-    4/5 models: "वहाँ गए थे"  (grammatically correct)
-    Action: Add "गए" to bin. Models using "गए" are not penalised.
+Case 2: Valid spelling variant
+  Ref: "वहां" (anusvara)  vs  4/5 models: "वहाँ" (chandrabindu)
+  Both correct Hindi. Action: Add "वहाँ" to bin.
 
-  Case 2: Valid spelling variant
-    Ref: "वहां"  (anusvara form)
-    4/5 models: "वहाँ"  (chandrabindu form)
-    Both are correct Hindi. Action: Add "वहाँ" to bin.
-
-  Case 3: Script normalisation
-    Ref: "किये"  (older spelling)
-    4/5 models: "किए"  (modern standard spelling)
-    Both are correct. Action: Add "किए" to bin.
+Case 3: Script normalisation
+  Ref: "किये" (older)  vs  4/5 models: "किए" (modern standard)
+  Both correct. Action: Add "किए" to bin.
 
 
 LATTICE WER RESULTS
----------------------
+--------------------
 
-Reference overrides detected in the assignment transcript:
+Reference overrides detected in assignment transcript:
   Bin 9:  4/5 models prefer 'देखे' over ref 'देखिए'
   Bin 16: 4/5 models prefer 'वहाँ' over ref 'वहां'
   Bin 17: 5/5 models prefer 'गए' over ref 'गया'
@@ -524,34 +453,26 @@ WER Comparison:
   model_D   5.44%           0.00%          -5.44%
   model_E   9.07%           2.79%          -6.28%
 
-All 5 models show reduced lattice WER because the reference contained
-several errors (गया vs गए, वहां vs वहाँ, उपर vs ऊपर).
-Models that were unfairly penalised by the rigid reference get relief.
-The method correctly identifies reference errors via model consensus.
-
-Code: q4/alignment.py, q4/lattice.py, q4_lattice_wer.py
+All 5 models show reduced lattice WER. Models unfairly penalised by
+reference errors get relief. Exact-match models stay at 0%.
 
 
 ==============================================================
 VERIFICATION
 ==============================================================
 
-All implementations verified with automated test suite:
-
-  python verify.py
-
-  Results: 27 passed, 0 failed
+python verify.py  ->  Results: 27 passed, 0 failed
 
 Tests cover:
-  Q2a: 7 number normalisation cases including compound and idiom edge cases
-  Q2b: 4 English detection cases including Roman and Devanagari loanwords
-  Q3:  5 spell checker cases including loanwords, Roman chars, morphology
-  Q4:  8 alignment and lattice WER cases using assignment transcript data
-  Q1:  4 module import and function correctness checks
+  Q2a: 7 number normalisation cases (simple, compound, idiom edge cases)
+  Q2b: 4 English detection cases (Roman + Devanagari loanwords)
+  Q3:  5 spell checker cases (loanwords, Roman chars, morphology)
+  Q4:  8 alignment + lattice WER cases using assignment transcript
+  Q1:  4 module import + function correctness checks
 
 
 ==============================================================
-REPOSITORY STRUCTURE
+PROJECT STRUCTURE
 ==============================================================
 
 https://github.com/Sumant3086/ShabdAI
@@ -560,7 +481,7 @@ https://github.com/Sumant3086/ShabdAI
   q1/preprocess/text_normalizer.py   Hindi text normalisation
   q1/preprocess/audio_processor.py   Audio resampling pipeline
   q1/preprocess/dataset_builder.py   HuggingFace Dataset builder
-  q1/finetune/trainer.py             Whisper fine-tuning
+  q1/finetune/trainer.py             Whisper fine-tuning config
   q1/finetune/evaluator.py           FLEURS WER evaluation
   q1/error_analysis/sampler.py       Stratified error sampling
   q1/error_analysis/taxonomy.py      7-category error taxonomy
@@ -571,10 +492,16 @@ https://github.com/Sumant3086/ShabdAI
   q3/classifier.py                   Multi-signal spell checker
   q4/alignment.py                    Edit distance alignment
   q4/lattice.py                      Lattice builder + WER
+  q1_preprocess.py                   Q1a entry point
+  q1_finetune.py                     Q1b/c entry point
+  q1_error_analysis.py               Q1d-g entry point
+  q2_cleanup_pipeline.py             Q2 entry point
+  q3_spell_check.py                  Q3 entry point
+  q4_lattice_wer.py                  Q4 entry point
   run_all.py                         Run all demos
   verify.py                          27-test verification suite
-  DELIVERABLES.md                    Detailed answers
-  requirements.txt                   Dependencies
+  requirements.txt                   Python dependencies
+  data/training_manifest_valid.csv   90 verified GCP records
 
 
 ==============================================================

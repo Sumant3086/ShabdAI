@@ -1,0 +1,36 @@
+﻿word,label,confidence,reason,frequency
+जनसंख्या,correct spelling,medium,not in base dictionary but has valid Hindi morphological suffix,10
+प्रोजेक्ट,correct spelling,high,known Devanagari loanword,9
+जनजाति,correct spelling,high,found in Hindi dictionary,8
+कुड़रमा,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",7
+घाटी,correct spelling,high,found in Hindi dictionary,6
+जंगली,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",5
+खांड,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",4
+टेंट,correct spelling,high,known Devanagari loanword,3
+लुढ़क,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",2
+किलोमीटर,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+मिस्टेक,correct spelling,high,known Devanagari loanword,1
+कैम्पिंग,correct spelling,high,known Devanagari loanword,1
+अनुभव,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+बाहरी,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+समझ,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+मेको,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+बोहोत,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+दिवोग,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+उड़न्टा,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+बदक,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+सायद,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+लगड़ा,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+जंगन,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+वगेरा,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+बारी,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
+अच्छा,correct spelling,high,found in Hindi dictionary,1
+होता,correct spelling,medium,not in base dictionary but has valid Hindi morphological suffix,1
+क्योंकि,correct spelling,high,found in Hindi dictionary,1
+देखना,correct spelling,high,found in Hindi dictionary,1
+लिखना,correct spelling,medium,not in base dictionary but has valid Hindi morphological suffix,1
+गया,correct spelling,medium,not in base dictionary but has valid Hindi morphological suffix,1
+थे,correct spelling,high,found in Hindi dictionary,1
+हम,correct spelling,high,found in Hindi dictionary,1
+वहाँ,correct spelling,high,found in Hindi dictionary,1
+पहले,incorrect spelling,low,"not in dictionary, moderate frequency — uncertain",1
